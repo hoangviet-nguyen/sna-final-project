@@ -1,16 +1,17 @@
 package sna.data;
 
-import it.uniroma1.dis.wsngroup.gexf4j.core.EdgeType;
-import it.uniroma1.dis.wsngroup.gexf4j.core.Gexf;
-import it.uniroma1.dis.wsngroup.gexf4j.core.Graph;
-import it.uniroma1.dis.wsngroup.gexf4j.core.Mode;
-import it.uniroma1.dis.wsngroup.gexf4j.core.Node;
+import it.uniroma1.dis.wsngroup.gexf4j.core.*;
+import it.uniroma1.dis.wsngroup.gexf4j.core.data.Attribute;
+import it.uniroma1.dis.wsngroup.gexf4j.core.data.AttributeClass;
+import it.uniroma1.dis.wsngroup.gexf4j.core.data.AttributeList;
+import it.uniroma1.dis.wsngroup.gexf4j.core.data.AttributeType;
 import it.uniroma1.dis.wsngroup.gexf4j.core.impl.GexfImpl;
 import it.uniroma1.dis.wsngroup.gexf4j.core.impl.StaxGraphWriter;
+import it.uniroma1.dis.wsngroup.gexf4j.core.impl.data.AttributeListImpl;
 import net.sandrohc.jikan.Jikan;
 import net.sandrohc.jikan.exception.JikanQueryException;
 import net.sandrohc.jikan.model.anime.Anime;
-import net.sandrohc.jikan.model.common.Producer;
+import net.sandrohc.jikan.model.common.Studio;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
@@ -38,9 +39,16 @@ public class Main {
         Graph graph = gexf.getGraph();
         graph.setDefaultEdgeType(EdgeType.UNDIRECTED).setMode(Mode.STATIC);
 
+        AttributeList nodeAttributes = new AttributeListImpl(AttributeClass.NODE);
+        graph.getAttributeLists().add(nodeAttributes);
+        Attribute typeAttr = nodeAttributes.createAttribute("type", AttributeType.STRING, "Type");
+
         Set<String> nodeIds = new HashSet<>();
-        //Sample code for creating a two node network with Producer -> Anime relationship
-        Flux<Anime> topAnime = Flux.range(1, 4)
+        Set<String> edgeIds = new HashSet<>();
+
+
+        // Fetch top 40 pages of anime, resulting in top 1000 anime
+        Flux<Anime> topAnime = Flux.range(1, 40)
                 .concatMap(page -> {
                     System.out.println("Fetching page " + page);
                     try {
@@ -52,34 +60,41 @@ public class Main {
 
         topAnime.collectList().block().forEach(anime -> {
             String animeId = "anime_" + anime.getMalId();
+            Node animeNode;
+
             if (!nodeIds.contains(animeId)) {
-                Node animeNode = graph.createNode(animeId);
+                animeNode = graph.createNode(animeId);
                 animeNode.setLabel(anime.getTitle());
+                animeNode.getAttributeValues().addValue(typeAttr, "Anime");
                 nodeIds.add(animeId);
+            } else {
+                animeNode = graph.getNode(animeId);
             }
 
-            for (Producer producer : anime.getProducers()) {
-                String producerId = "producer_" + producer.getMalId();
-                Node producerNode;
-                if (!nodeIds.contains(producerId)) {
-                    producerNode = graph.createNode(producerId);
-                    producerNode.setLabel(producer.getName());
-                    nodeIds.add(producerId);
+            for (Studio studio : anime.getStudios()) {
+                String studioId = "studio_" + studio.getMalId();
+                Node studioNode;
+
+                if (!nodeIds.contains(studioId)) {
+                    studioNode = graph.createNode(studioId);
+                    studioNode.setLabel(studio.getName());
+                    studioNode.getAttributeValues().addValue(typeAttr, "Studio");
+                    nodeIds.add(studioId);
                 } else {
-                    producerNode = graph.getNode(producerId);
+                    studioNode = graph.getNode(studioId);
                 }
 
-                Node animeNode = graph.getNode(animeId);
-                if (animeNode != null) {
-                    producerNode.connectTo(animeNode);
+                String edgeId = studioId + "->" + animeId;
+                if (!edgeIds.contains(edgeId)) {
+                    studioNode.connectTo(animeNode);
+                    edgeIds.add(edgeId);
                 }
             }
-
         });
 
         try {
             StaxGraphWriter graphWriter = new StaxGraphWriter();
-            File outputFile = new File("anime_producer_network.gexf");
+            File outputFile = new File("anime_studio_network.gexf");
             Writer out = new FileWriter(outputFile, false);
             graphWriter.writeToStream(gexf, out, "UTF-8");
             System.out.println("Graph saved to: " + outputFile.getAbsolutePath());
@@ -88,3 +103,4 @@ public class Main {
         }
     }
 }
+
