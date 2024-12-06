@@ -47,6 +47,7 @@ public class Main {
         Set<String> edgeIds = new HashSet<>();
 
 
+        
         // Fetch top 40 pages of anime, resulting in top 1000 anime
         Flux<Anime> topAnime = Flux.range(1, 40)
                 .concatMap(page -> {
