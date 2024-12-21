@@ -1,27 +1,24 @@
 package sna.data;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.*;
-
-import net.sandrohc.jikan.model.anime.AnimeType;
-import net.sandrohc.jikan.model.character.CharacterVoiceActor;
-import net.sandrohc.jikan.model.person.PersonSimple;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVPrinter;
-
 import net.sandrohc.jikan.Jikan;
 import net.sandrohc.jikan.exception.JikanQueryException;
 import net.sandrohc.jikan.model.anime.Anime;
+import net.sandrohc.jikan.model.anime.AnimeType;
 import net.sandrohc.jikan.model.character.CharacterBasic;
 import net.sandrohc.jikan.model.character.CharacterRole;
+import net.sandrohc.jikan.model.character.CharacterVoiceActor;
 import net.sandrohc.jikan.model.common.Studio;
+import net.sandrohc.jikan.model.person.PersonSimple;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
 import reactor.core.publisher.Flux;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
-import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.*;
 
 
 public class DataLoader {
@@ -31,6 +28,7 @@ public class DataLoader {
     private final Set<Studio> studioSet;
     private final Set<PersonSimple> personSimpleSet;
     private final Map<Anime, List<PersonSimple>> voiceActorsMap;
+    private final int animeFetchLimit;
 
     public DataLoader() {
         jikan = new Jikan();
@@ -38,6 +36,7 @@ public class DataLoader {
         studioSet = new HashSet<>();
         personSimpleSet = new HashSet<>();
         voiceActorsMap = new HashMap<>();
+        animeFetchLimit = 10; // This defines the number of anime to fetch. For testing purposes, we recommend setting this to 10.
     }
 
     public static void main(String[] args) {
@@ -52,7 +51,7 @@ public class DataLoader {
         // Fetches the raw data from the Jikan API
         loader.fetchRawData();
 
-        // Maps the voice actors for each anime
+        // Maps the voice actors for each anime. This takes the longest time to complete. For each anime, it needs to call the Jikan API to fetch the voice actors.
         loader.mapAnimeActor(loader.animeList);
 
         // Defines the headers for the CSV files
@@ -73,32 +72,60 @@ public class DataLoader {
         log("Total time taken: " + (endTime - startTime) / 1000 + " seconds");
     }
 
+    private static void cleanDataDir() {
+        System.out.println();
+        log("Cleaning data directory...");
+        try (var paths = Files.walk(Paths.get("./data"))) {
+            paths.filter(Files::isRegularFile)
+                    .map(java.nio.file.Path::toFile)
+                    .forEach(file -> {
+                        if (!file.delete()) {
+                            logError("Failed to delete file: " + file.getAbsolutePath());
+                        }
+                    });
+            log("Data directory cleaned.");
+            System.out.println();
+        } catch (IOException e) {
+            logError("Error cleaning data directory: " + e.getMessage());
+        }
+    }
+
+    private static void log(String message) {
+        System.out.println("[INFO] [" + new Date() + "] " + message);
+    }
+
+    private static void logError(String message) {
+        System.err.println("[ERROR] [" + new Date() + "] " + message);
+    }
+
     private void fetchRawData() {
         if (!animeList.isEmpty()) {
             return;
         }
         log("Fetching anime data...");
         Set<Integer> uniqueAnimeIds = new HashSet<>();
+        ProgressBar progressBar = new ProgressBar(animeFetchLimit, "Fetching Anime Data");
 
         Flux.range(1, Integer.MAX_VALUE)
                 .concatMap(page -> {
                     try {
                         return jikan.query().anime().top().limit(25).page(page).execute();
                     } catch (JikanQueryException e) {
-                        throw new RuntimeException("Error fetching data from Jikan API", e);
+                        return Flux.error(new RuntimeException("Error fetching data from Jikan API", e));
                     }
                 })
                 .filter(anime -> anime.getType() == AnimeType.TV || anime.getType() == AnimeType.MOVIE)
                 .takeWhile(anime -> {
                     if (uniqueAnimeIds.add(anime.getMalId())) {
                         animeList.add(anime);
+                        progressBar.update();
                     }
-                    return uniqueAnimeIds.size() < 1000; // This defines the number of anime to fetch. For testing purposes, we recommend setting this to 10.
+                    return uniqueAnimeIds.size() < animeFetchLimit;
                 })
                 .blockLast();
 
         animeList.forEach(anime -> studioSet.addAll(anime.getStudios()));
-        log("Anime data fetching complete.");
+        progressBar.complete();
     }
 
     private void saveNodes(String writerPath, List<?> datapoints, String label, String[] header) {
@@ -112,7 +139,7 @@ public class DataLoader {
             ProgressBar progressBar = new ProgressBar(datapoints.size(), "Saving " + label + " nodes");
 
             for (Object data : datapoints) {
-                Object[] record = null;
+                Object[] record = new String[0];
 
                 if (data instanceof Anime anime) {
                     record = processAnime(anime, label);
@@ -122,12 +149,11 @@ public class DataLoader {
                     record = new String[]{String.valueOf(studio.getMalId()), label, studio.getName()};
                 }
 
-                printer.printRecord((Object[]) record);
+                printer.printRecord(record);
                 progressBar.update();
             }
 
             progressBar.complete();
-            log(label + " nodes saved successfully.");
         } catch (IOException e) {
             logError("Error writing " + label + " nodes to CSV: " + e.getMessage());
         }
@@ -188,42 +214,24 @@ public class DataLoader {
             default -> throw new IllegalArgumentException("Unknown relation type: " + relationType);
         };
 
+        ProgressBar progressBar = new ProgressBar(edges.size(), "Saving " + relationType + " relations");
+
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(writerPath));
              CSVPrinter printer = new CSVPrinter(writer, format)) {
             for (List<String> edge : edges) {
                 printer.printRecord(edge);
+                progressBar.update();
             }
-            log(relationType + " relations saved successfully: " + writerPath);
+            progressBar.complete();
         } catch (IOException e) {
             logError("Error writing " + relationType + " relations to CSV: " + e.getMessage());
         }
     }
 
-    private static void cleanDataDir() {
-        try {
-            log("Cleaning data directory...");
-            Files.walk(Paths.get("./data"))
-                    .filter(Files::isRegularFile)
-                    .map(java.nio.file.Path::toFile)
-                    .forEach(File::delete);
-            log("Data directory cleaned.");
-        } catch (IOException e) {
-            logError("Error cleaning data directory: " + e.getMessage());
-        }
-    }
-
-    private static void log(String message) {
-        System.out.println("[INFO] [" + new Date() + "] " + message);
-    }
-
-    private static void logError(String message) {
-        System.err.println("[ERROR] [" + new Date() + "] " + message);
-    }
-
     static class ProgressBar {
         private final int total;
-        private int current = 0;
         private final String taskName;
+        private int current = 0;
 
         public ProgressBar(int total, String taskName) {
             this.total = total;
@@ -234,6 +242,7 @@ public class DataLoader {
         public void complete() {
             System.out.println();
             log(taskName + " complete.");
+            System.out.println();
         }
 
         public void update() {
