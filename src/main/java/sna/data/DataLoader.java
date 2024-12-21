@@ -1,7 +1,6 @@
 package sna.data;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,18 +22,20 @@ import java.io.FileWriter;
 
 public class DataLoader {
 
-    private Jikan jikan;
+    private static Jikan jikan;
 
     public DataLoader() { jikan = new Jikan();}
 
     public static void main (String[] args) {  
         DataLoader loader = new DataLoader();
+        getRawData();
         //loader.loadStudios("./data/Anime_Studios.csv");
         //loader.loadProducers();
-        loader.loadVoiceActors("./data/VoiceActors.csv");
+        //loader.loadVoiceActors("./data/VoiceActors.csv");
 	}
 
-    private Flux<Anime> getRawData() {
+    private static Flux<Anime> getRawData() {
+        System.out.println("Fetching top anime Data");
         Flux<Anime> topAnime = Flux.range(1, 40)
         .concatMap(page -> {
             try {
@@ -43,6 +44,8 @@ public class DataLoader {
                 throw new RuntimeException(e);
             }
         });
+        System.out.println(" Done!");
+        System.out.println("Loading complete!");
         return topAnime;
     }
 
@@ -56,13 +59,16 @@ public class DataLoader {
         System.out.println("Done");
 
         System.out.println("Format data for csv");
+        int counter = 1;
         topAnime.toStream().forEach(anime -> {
+            System.out.println("\r" + "Processing anime: " + counter);
             String title = anime.getTitle();
             String rank = String.valueOf(anime.getRank());
             String type = anime.getType().getSearch();
             String[] rank_title = {rank, title, type};
             List<String> studios = anime.getStudios().stream().map(Studio::getName).toList();
             data.put(rank_title, studios);
+            counter++;
         });
         System.out.println("Done");     
 
@@ -70,6 +76,9 @@ public class DataLoader {
             final CSVPrinter printer = new CSVPrinter(writer, format)) {
             
             System.out.println("Writing data to csv");
+            int counter = 0;
+            int fetchedAnimes = data.size();
+            final StringBuilder progress = new StringBuilder("|");
             data.forEach((rank_title, studios) -> {
                 studios.stream().forEach(studio -> {
                     try {
@@ -78,8 +87,15 @@ public class DataLoader {
                         ioe.printStackTrace();
                     }
                 });
-            });
 
+                
+                int percentage = (int) ((counter / (double) fetchedAnimes) * 100) + 1;
+                if (counter % (fetchedAnimes / 100) == 0 || counter == fetchedAnimes - 1) {
+                    progress.append("=");
+                    System.out.print("\r" + progress.toString() + "| " + percentage + "%");
+                }
+            });
+            System.out.println(" Done!");
             printer.flush();  
             System.out.println("CSV file was created successfully.");
 
@@ -87,26 +103,10 @@ public class DataLoader {
             System.out.println(ioe.getMessage());
         }
 
-    }
-
-    public void loadProducers() {
-        JikanBuilder builder = new JikanBuilder();
-        builder = builder.baseUrl("https://api.jikan.moe/v4/top/anime?type=tv");
-        Jikan jikan = new Jikan(builder);
-
-        try {
-            Flux<Anime> topAnime = jikan.query().anime().top().execute();
-            topAnime.toStream().forEach(anime -> {
-                System.out.println(anime.getTitle());
-                System.out.println(anime.getType());
-            });
-        } catch (JikanQueryException e) {
-            e.printStackTrace();
-        }
-    }   
+    } 
 
     public void loadVoiceActors(String writerPath) {
-        String[] header = {"rank", "anime","character", "voiceactor"};
+        String[] header = {"rank", "anime", "voiceactor"};
         CSVFormat format = CSVFormat.DEFAULT.builder().setHeader(header).build();
 
         System.out.println("Loading data into programm");
@@ -115,7 +115,6 @@ public class DataLoader {
         List<Integer> malIds = topAnime.toStream().map(Anime::getMalId).toList();
         List<String> titles = topAnime.toStream().map(Anime::getTitle).toList();
         List<Integer> ranks = topAnime.toStream().map(Anime::getRank).toList();
-        List<List<String>> characters = new ArrayList<>();
         System.out.println("Done");
 
         Map<String, List<String>> rawData = new HashMap<>();
@@ -124,7 +123,10 @@ public class DataLoader {
 
             int counter = 0;
             System.out.println("Loading voice Actors");
-            for (int i = 0; i < malIds.size(); i++) {
+            String progress = "|";
+            int malIdSize = malIds.size();
+            for (int i = 0; i < malIdSize; i++) {
+
                 Flux<CharacterBasic> current = jikan.query().anime().characters(malIds.get(i)).execute();
 
                 List<String> actors = current.toStream().filter(character -> character.getRole().equals(CharacterRole.MAIN))
@@ -133,41 +135,45 @@ public class DataLoader {
                                   .map(actor -> actor.getPerson().getName())
                                   .toList();
                 
-                characters.add(current.toStream().filter(character -> character.getRole().equals(CharacterRole.MAIN))
-                                                 .map(character -> character.getCharacter().getName()).toList());
                 rawData.put(titles.get(i), actors);
 
                 
-                if(counter % 100 == 0) {
-                    System.out.println("Finished: " + counter / 1000 +"%");
+                int percentage = (int) ((i / (double) malIdSize) * 100) + 1;
+                if (i % (malIdSize / 100) == 0 || i == malIdSize - 1) {
+                    progress += "=";
+                    System.out.print("\r" + progress + "| " + percentage + "%");
+    
                 }
-
+    
                 counter++;
             }
+            System.out.println(" Done!");
+            System.out.println("Loading complete!");
 
             System.out.println("Format data into csv");
             counter = 0;
+            int fetchedAnimes = titles.size();
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(writerPath));
             final CSVPrinter printer = new CSVPrinter(writer, format)) {
 
                 for (String title : titles) {
 
-                    int currentCharacter = 0;
-                    List<String> animeCharacters = characters.get(counter); 
                     List<String> actors = rawData.get(title);
-
                     for (String actor : actors) {
-                            currentCharacter += currentCharacter < animeCharacters.size() -1 ? 1 : 0;
-                            printer.printRecord(ranks.get(counter), title, animeCharacters.get(currentCharacter), actor);
+                            printer.printRecord(ranks.get(counter), title, actor);
                     }
 
-                    if(counter % 100 == 0) {
-                        System.out.println("Finished: " + counter / 1000 +"%");
+                    int percentage = (int) ((counter / (double) fetchedAnimes) * 100) + 1;
+                    if (counter % (fetchedAnimes / 100) == 0 || counter == fetchedAnimes - 1) {
+                        progress += "=";
+                        System.out.print("\r" + progress + "| " + percentage + "%");
+        
                     }
 
                     counter++;
                 }
-
+                System.out.println(" Done!");
+                System.out.println("Formatting complete!");
                 printer.flush();
 
             } catch (IOException e) {
