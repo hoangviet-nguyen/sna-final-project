@@ -1,7 +1,10 @@
 package sna.data;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import net.sandrohc.jikan.model.MalEntity;
 import net.sandrohc.jikan.model.anime.AnimeType;
@@ -28,34 +31,26 @@ public class DataLoader {
 
     public DataLoader() { jikan = new Jikan();}
 
-public static void main(String[] args) {
-    long startTime = System.currentTimeMillis();
-    DataLoader loader = new DataLoader();
+    public static void main(String[] args) {
+        long startTime = System.currentTimeMillis();
+        DataLoader loader = new DataLoader();
+        List<Anime> animes = loader.getRawData();
+        String[] animeHeader = {"id", "label", "name", "score", "rank"};
 
-    List<Anime> animes = loader.getRawData();
+        // Speichern der Knoten
+        loader.saveNodes("./data/Anime_Nodes.csv", animes, "Anime", animeHeader);
 
-    // Save anime nodes
-    loader.saveNodes("./data/Anime_Nodes.csv", "anime", animes);
+        // Speichern der Kanten
+        loader.saveAnimeEdges("./data/Anime_Producers_Edges.csv", "producers");
+        loader.saveAnimeEdges("./data/Anime_Studios_Edges.csv", "studios");
+        // Abrufen der Synchronsprecher geht sehr lange, da für jeden Anime die Synchronsprecher abgerufen werden müssen
+        // Zum testen kann die Zeile ".take(1000)" in der Methode "getRawData()"  auf ".take(10)" geändert werden
+        loader.loadVoiceActorEdges("./data/VoiceActors_Edges.csv");
 
-    // Save producer nodes
-    loader.saveNodes("./data/Producer_Nodes.csv", "producers", animes);
-
-    // Save studio nodes
-    loader.saveNodes("./data/Studio_Nodes.csv", "studios", animes);
-
-    // Save anime-producer relations
-    loader.saveAnimeRelations("./data/Anime_Producer_Relations.csv", "producers");
-
-    // Save anime-studio relations
-    loader.saveAnimeRelations("./data/Anime_Studio_Relations.csv", "studios");
-
-    // Load voice actor edges
-    loader.loadVoiceActorEdges("./data/VoiceActors_Edges.csv");
-
-    long endTime = System.currentTimeMillis();
-    long duration = endTime - startTime;
-    System.out.println("Total time taken: " + duration / 1000 + " seconds");
-}
+        long endTime = System.currentTimeMillis();
+        long duration = endTime - startTime;
+        System.out.println("Total time taken: " + duration / 1000 + " seconds");
+    }
 
 
     private List<Anime> getRawData() {
@@ -73,57 +68,76 @@ public static void main(String[] args) {
                     }
                 })
                 .filter(anime -> anime.getType() == AnimeType.TV || anime.getType() == AnimeType.MOVIE)
-                .take(10)// ändern auf 10 für schnelleres Testen
+                .take(1000)// ändern auf 10 für schnelleres Testen
                 .collectList()
                 .block();
         return animeList;
     }
 
-    private void saveNodes(String writerPath, String nodeType, List<Anime> animes) {
-        String[] header = nodeType.equals("anime") ? new String[]{"id", "label", "name", "score", "rank"} : new String[]{"id", "label", "name"};
+
+    private void saveNodes(String writerPath, List<?> datapoints, String label, String[] header) {
         CSVFormat format = CSVFormat.DEFAULT.builder().setHeader(header).build();
 
-        System.out.println("Saving " + nodeType + " nodes...");
-        Set<String> uniqueNames = new HashSet<>(); // To avoid duplicates
+        System.out.println("Saving" + label + "nodes...");
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(writerPath));
-             CSVPrinter printer = new CSVPrinter(writer, format)) {
+            final CSVPrinter printer = new CSVPrinter(writer, format)) {
+            int size = datapoints.size();
+            String progress = "|";
+            int counter = 0;
 
-            for (Anime anime : animes) {
-                if (nodeType.equals("anime")) {
-                    printer.printRecord(anime.getMalId(), "Anime", anime.getTitle(), anime.getScore(), anime.getRank());
-                } else {
-                    List<String> items = nodeType.equals("studios")
-                            ? anime.getStudios().stream().map(Studio::getName).toList()
-                            : anime.getProducers().stream().map(Producer::getName).toList();
-                    for (String item : items) {
-                        if (uniqueNames.add(item)) { // Prevent duplicates
-                            printer.printRecord(item.hashCode(), nodeType.substring(0, 1).toUpperCase() + nodeType.substring(1), item);
-                        }
-                    }
+            for (Object data : datapoints) {
+                // Display the progress
+                int percentage = (int) ((counter / (double) size) * 100) + 1;
+                if (counter % (size / 100) == 0 || counter == size - 1) {
+                    progress += "=";
+                    System.out.print("\r" + progress + "| " + percentage + "%");
+    
                 }
+
+                Object[] record;
+                
+                if (data instanceof Anime) {
+                    Anime anime = (Anime) data;
+                    record = processAnime(anime);
+                }
+
+                printer.printRecord((Object[]) record);
+                counter++;
             }
 
-            printer.flush();
-            System.out.println(nodeType + " nodes saved successfully: " + writerPath);
+            // clean up messages
+            System.out.println(" Done!");
+            System.out.println("Formatting complete!");
+            printer.flush();  
+            System.out.println("CSV file was created successfully.");
 
         } catch (IOException e) {
-            System.err.println("Error writing " + nodeType + " nodes to CSV: " + e.getMessage());
+            System.err.println("Error writing anime nodes to CSV: " + e.getMessage());
         }
     }
 
-    private void saveAnimeRelations(String writerPath, String relationType) {
+    private Object[] processAnime(Anime anime) {
+        String malId = String.valueOf(anime.getMalId());
+        String score = String.valueOf(anime.getScore());
+        String title = anime.getTitle();
+        String rank = String.valueOf(anime.getRank());
+        String[] record = {malId, title, score, rank};
+        return record;
+    }
+
+    private void saveAnimeEdges(String writerPath, String relationType) {
         String[] header = {"source", "target", "type"};
         CSVFormat format = CSVFormat.DEFAULT.builder().setHeader(header).build();
 
-        System.out.println("Saving anime " + relationType + " relations...");
+        System.out.println("Saving anime edges...");
         List<String[]> edges = getRawData().stream()
                 .flatMap(anime -> {
                     int animeId = anime.getMalId();
                     List<String> relatedItems = relationType.equals("studios")
                             ? anime.getStudios().stream().map(Studio::getName).toList()
                             : anime.getProducers().stream().map(Producer::getName).toList();
-                    return relatedItems.stream().map(item -> new String[]{String.valueOf(animeId), String.valueOf(item.hashCode()), relationType});
+                    return relatedItems.stream().map(item -> new String[]{String.valueOf(animeId), item, "undirected"});
                 })
                 .collect(Collectors.toList());
 
@@ -135,14 +149,12 @@ public static void main(String[] args) {
             }
 
             printer.flush();
-            System.out.println(relationType + " relations saved successfully: " + writerPath);
+            System.out.println("Anime edges saved successfully: " + writerPath);
 
         } catch (IOException e) {
-            System.err.println("Error writing anime " + relationType + " relations to CSV: " + e.getMessage());
+            System.err.println("Error writing anime edges to CSV: " + e.getMessage());
         }
     }
-
-
 
     public void loadVoiceActorEdges(String writerPath) {
         String[] header = {"source", "target", "type"};
@@ -152,7 +164,6 @@ public static void main(String[] args) {
         List<Anime> topAnime = getRawData();
         topAnime.sort(Comparator.comparingInt(MalEntity::getMalId));
         List<Integer> malIds = topAnime.stream().map(Anime::getMalId).toList();
-        List<Integer> animeIds = topAnime.stream().map(Anime::getMalId).toList();
         List<String> titles = topAnime.stream().map(Anime::getTitle).toList();
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(writerPath));
@@ -160,7 +171,6 @@ public static void main(String[] args) {
 
             System.out.println("Lade Voice Actor-Verbindungen...");
             for (int i = 0; i < malIds.size(); i++) {
-                String animeId = String.valueOf(animeIds.get(i));
                 String animeTitle = titles.get(i);
                 System.out.println("Abrufen von Synchronsprechern für: " + animeTitle);
                 try {
@@ -175,7 +185,7 @@ public static void main(String[] args) {
 
                     for (String voiceActor : voiceActors) {
                         // Schreibe jede Verbindung in die CSV-Datei
-                        printer.printRecord(String.valueOf(animeId), voiceActor, "undirected");
+                        printer.printRecord(animeTitle, voiceActor, "undirected");
                     }
 
                 } catch (JikanQueryException e) {
@@ -194,5 +204,4 @@ public static void main(String[] args) {
             System.err.println("Fehler beim Schreiben der CSV-Datei: " + e.getMessage());
         }
     }
-
 }
