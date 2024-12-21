@@ -7,6 +7,7 @@ import net.sandrohc.jikan.model.anime.AnimeType;
 import net.sandrohc.jikan.model.character.CharacterBasic;
 import net.sandrohc.jikan.model.character.CharacterRole;
 import net.sandrohc.jikan.model.character.CharacterVoiceActor;
+import net.sandrohc.jikan.model.common.Producer;
 import net.sandrohc.jikan.model.common.Studio;
 import net.sandrohc.jikan.model.person.PersonSimple;
 import org.apache.commons.csv.CSVFormat;
@@ -26,6 +27,7 @@ public class DataLoader {
     private final Jikan jikan;
     private final List<Anime> animeList;
     private final Set<Studio> studioSet;
+    private final Set<Producer> producerSet;
     private final Set<PersonSimple> personSimpleSet;
     private final Map<Anime, List<PersonSimple>> voiceActorsMap;
     private final int animeFetchLimit;
@@ -34,9 +36,10 @@ public class DataLoader {
         jikan = new Jikan();
         animeList = new ArrayList<>();
         studioSet = new HashSet<>();
+        producerSet = new HashSet<>();
         personSimpleSet = new HashSet<>();
         voiceActorsMap = new HashMap<>();
-        animeFetchLimit = 10; // This defines the number of anime to fetch. For testing purposes, we recommend setting this to 10.
+        animeFetchLimit = 1000; // This defines the number of anime to fetch. For testing purposes, we recommend setting this to 10.
     }
 
     public static void main(String[] args) {
@@ -55,18 +58,24 @@ public class DataLoader {
         loader.mapAnimeActor(loader.animeList);
 
         // Defines the headers for the CSV files
-        String[] animeHeader = {"id", "label", "name", "score", "rank"};
-        String[] studioHeader = {"id", "label", "name"};
-        String[] voiceActorHeader = {"id", "label", "name"};
+        String[] animeHeader = {"id", "label", "name", "score", "rank","studio"};
+        String[] studioHeader = {"id", "label", "name"},
+                producerHeader = {"id", "label", "name"},
+                voiceActorHeader = {"id", "label", "name"};
+
+
 
         // Saves the nodes
-        loader.saveNodes("./data/VoiceActor_Nodes.csv", loader.personSimpleSet.stream().toList(), "Voice-Actor", voiceActorHeader);
+        //loader.saveNodes("./data/VoiceActor_Nodes.csv", loader.personSimpleSet.stream().toList(), "Voice-Actor", voiceActorHeader);
         loader.saveNodes("./data/Anime_Nodes.csv", loader.animeList, "Anime", animeHeader);
         loader.saveNodes("./data/Studio_Nodes.csv", loader.studioSet.stream().toList(), "Studio", studioHeader);
+        loader.saveNodes("./data/Producer_Nodes.csv", loader.producerSet.stream().toList(), "Producer", producerHeader);
+        loader.saveNodes("./data/VoiceActor_Nodes.csv", loader.personSimpleSet.stream().toList(), "Voice-Actor", voiceActorHeader);
 
         // Saves the relations
         loader.saveRelation("./data/VoiceActor_Relations.csv", "voice-actors");
         loader.saveRelation("./data/Studio_Relations.csv", "studios");
+        loader.saveRelation("./data/Producer_Relations.csv", "producers");
 
         long endTime = System.currentTimeMillis();
         log("Total time taken: " + (endTime - startTime) / 1000 + " seconds");
@@ -124,7 +133,10 @@ public class DataLoader {
                 })
                 .blockLast();
 
-        animeList.forEach(anime -> studioSet.addAll(anime.getStudios()));
+        animeList.forEach(anime -> {
+            studioSet.addAll(anime.getStudios());
+            producerSet.addAll(anime.getProducers());
+        });
         progressBar.complete();
     }
 
@@ -147,6 +159,8 @@ public class DataLoader {
                     record = new String[]{String.valueOf(voiceActor.getMalId()), label, voiceActor.getName()};
                 } else if (data instanceof Studio studio) {
                     record = new String[]{String.valueOf(studio.getMalId()), label, studio.getName()};
+                } else if (data instanceof Producer producer) {
+                    record = new String[]{String.valueOf(producer.getMalId()), label, producer.getName()};
                 }
 
                 printer.printRecord(record);
@@ -165,7 +179,8 @@ public class DataLoader {
                 label,
                 anime.getTitle(),
                 String.valueOf(anime.getScore()),
-                String.valueOf(anime.getRank())
+                String.valueOf(anime.getRank()),
+                String.valueOf(anime.getStudios().stream().map(Studio::getName).toList())
         };
     }
 
@@ -210,6 +225,10 @@ public class DataLoader {
             case "studios" -> animeList.stream()
                     .flatMap(anime -> anime.getStudios().stream()
                             .map(studio -> List.of(String.valueOf(anime.getMalId()), String.valueOf(studio.getMalId()), "undirected")))
+                    .toList();
+            case "producers" -> animeList.stream()
+                    .flatMap(anime -> anime.getProducers().stream()
+                            .map(producer -> List.of(String.valueOf(anime.getMalId()), String.valueOf(producer.getMalId()), "undirected")))
                     .toList();
             default -> throw new IllegalArgumentException("Unknown relation type: " + relationType);
         };
