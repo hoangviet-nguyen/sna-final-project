@@ -1,0 +1,45 @@
+[INFO] [Sat Dec 21 17:32:56 CET 2024] Starting data loading process...
+
+[INFO] [Sat Dec 21 17:32:56 CET 2024] Cleaning data directory...
+[INFO] [Sat Dec 21 17:32:56 CET 2024] Data directory cleaned.
+
+[INFO] [Sat Dec 21 17:32:57 CET 2024] Fetching anime data...
+Fetching Anime Data [##################################################] 1000/1000
+[INFO] [Sat Dec 21 17:33:49 CET 2024] Fetching Anime Data complete.
+
+[INFO] [Sat Dec 21 17:33:49 CET 2024] Fetching Voice Actors...
+Fetching Voice Actors [##################################################] 1000/1000
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Fetching Voice Actors complete.
+
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Voice Actor fetching complete.
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Saving Anime nodes...
+Saving Anime nodes [##################################################] 1000/1000
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Saving Anime nodes complete.
+
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Saving Studio nodes...
+Saving Studio nodes [##################################################] 144/144
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Saving Studio nodes complete.
+
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Saving Producer nodes...
+Saving Producer nodes [##################################################] 427/427
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Saving Producer nodes complete.
+
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Saving Voice-Actor nodes...
+Saving Voice-Actor nodes [##################################################] 1013/1013
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Saving Voice-Actor nodes complete.
+
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Saving voice-actors relations...
+Saving voice-actors relations [##################################################] 4040/4040
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Saving voice-actors relations complete.
+
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Saving studios relations...
+Saving studios relations [##################################################] 1060/1060
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Saving studios relations complete.
+
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Saving producers relations...
+Saving producers relations [##################################################] 3852/3852
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Saving producers relations complete.
+
+[INFO] [Sat Dec 21 17:50:31 CET 2024] Total time taken: 1054 seconds
+
+Process finished with exit code 0
