@@ -74,7 +74,7 @@ public class DataLoader {
     }
 
     private void fetchRawData() {
-        if (animeList != null && !animeList.isEmpty()) {
+        if (!animeList.isEmpty()) {
             return;
         }
         log("Fetching anime data...");
@@ -93,7 +93,7 @@ public class DataLoader {
                     if (uniqueAnimeIds.add(anime.getMalId())) {
                         animeList.add(anime);
                     }
-                    return uniqueAnimeIds.size() < 10; // This defines the number of anime to fetch. For testing purposes, we recommend setting this to 10.
+                    return uniqueAnimeIds.size() < 1000; // This defines the number of anime to fetch. For testing purposes, we recommend setting this to 10.
                 })
                 .blockLast();
 
