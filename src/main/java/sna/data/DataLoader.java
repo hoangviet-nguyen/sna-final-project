@@ -58,10 +58,10 @@ public class DataLoader {
         loader.mapAnimeActor(loader.animeList);
 
         // Defines the headers for the CSV files
-        String[] animeHeader = {"id", "label", "name", "score", "rank","studio"};
-        String[] studioHeader = {"id", "label", "name"},
-                producerHeader = {"id", "label", "name"},
-                voiceActorHeader = {"id", "label", "name"};
+        String[] animeHeader = {"id", "label", "name", "score", "rank","studio"},
+                 studioHeader = {"id", "label", "name"},
+                 producerHeader = {"id", "label", "name"},
+                 voiceActorHeader = {"id", "label", "name"};
 
 
 
@@ -156,7 +156,7 @@ public class DataLoader {
                 if (data instanceof Anime anime) {
                     record = processAnime(anime, label);
                 } else if (data instanceof PersonSimple voiceActor) {
-                    record = new String[]{String.valueOf(voiceActor.getMalId()), label, voiceActor.getName()};
+                    record = processVoiceActors(voiceActor, label);
                 } else if (data instanceof Studio studio) {
                     record = new String[]{String.valueOf(studio.getMalId()), label, studio.getName()};
                 } else if (data instanceof Producer producer) {
@@ -171,6 +171,14 @@ public class DataLoader {
         } catch (IOException e) {
             logError("Error writing " + label + " nodes to CSV: " + e.getMessage());
         }
+    }
+
+    private Object[] processVoiceActors(PersonSimple actor, String label) {
+        return new String[]{
+            String.valueOf(actor.getName().hashCode()),
+            label,
+            actor.getName()
+        };
     }
 
     private Object[] processAnime(Anime anime, String label) {
@@ -219,8 +227,8 @@ public class DataLoader {
 
         List<List<String>> edges = switch (relationType) {
             case "voice-actors" -> voiceActorsMap.entrySet().stream()
-                    .flatMap(entry -> entry.getValue().stream()
-                            .map(actor -> List.of(String.valueOf(entry.getKey().getMalId()), String.valueOf(actor.getMalId()), "undirected")))
+                    .flatMap(anime -> anime.getValue().stream()
+                            .map(actor -> List.of(String.valueOf(anime.getKey().getMalId()), String.valueOf(actor.getName().hashCode()), "undirected")))
                     .toList();
             case "studios" -> animeList.stream()
                     .flatMap(anime -> anime.getStudios().stream()
