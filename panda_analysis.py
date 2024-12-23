@@ -10,7 +10,7 @@ producer_relation_df = pd.read_csv("data/Producer_Relations.csv")
 studio_df = pd.read_csv("data/Studio_Nodes.csv")
 studio_relation_df = pd.read_csv("data/Studio_Relations.csv")
 
-voice_actor_df = pd.read_csv("data/VoiceActor_Nodes.csv")
+voice_actor_df = pd.read_csv("data/VoiceActor_Nodes.csv", delimiter=';')
 voice_actor_relation_df = pd.read_csv("data/VoiceActor_Relations.csv")
 
 
